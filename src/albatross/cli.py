@@ -28,12 +28,15 @@ def ingest(db: str, pdf: Path, first: int | None, last: int | None) -> dict:
     store.add_document(conn, doc_id, pdf, title=pdf.stem)
 
     added = skipped = 0
-    for page in read_pages(str(pdf), first, last):
-        if store.add_page(conn, doc_id, page):
-            added += 1
-        else:
-            skipped += 1
-    conn.commit()
+    try:
+        for page in read_pages(str(pdf), first, last):
+            if store.add_page(conn, doc_id, page):
+                added += 1
+            else:
+                skipped += 1
+        conn.commit()
+    finally:
+        conn.close()
     return {"doc_id": doc_id, "pages_added": added, "pages_skipped": skipped}
 
 
@@ -57,12 +60,14 @@ def main(argv=None):
               f" ({r['pages_skipped']} already known)  doc={r['doc_id']}")
     else:
         conn = store.connect(args.db)
-        for row in conn.execute(
+        rows = conn.execute(
             "SELECT d.title,"
             "  (SELECT COUNT(*) FROM pages  p WHERE p.doc_id = d.id) n,"
             "  (SELECT COUNT(*) FROM blocks b WHERE b.doc_id = d.id) nb"
             " FROM documents d ORDER BY d.added_at"
-        ):
+        ).fetchall()
+        conn.close()
+        for row in rows:
             print(f"{row['n']:>4} pages  {row['nb']:>6} blocks  {row['title']}")
 
 
