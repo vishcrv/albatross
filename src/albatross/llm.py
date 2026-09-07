@@ -30,6 +30,30 @@ EXTRACT_MODEL = os.environ.get("ALBATROSS_EXTRACT_MODEL", "gemini-3.5-flash-lite
 JUDGE_MODEL = os.environ.get("ALBATROSS_JUDGE_MODEL", "gemini-3.8-flash")
 
 _last_call = 0.0
+_cache_conn: sqlite3.Connection | None = None
+
+# The cache lives in its OWN file, deliberately. It used to share the knowledge
+# database, and rebuilding that schema threw away every paid-for response -
+# which is the exact opposite of D8, where a page is paid for once ever. The
+# cache is a durable asset; the knowledge layer derived from it is disposable.
+CACHE_PATH = os.environ.get("ALBATROSS_CACHE", ".llm-cache.db")
+
+
+def cache() -> sqlite3.Connection:
+    global _cache_conn
+    if _cache_conn is None:
+        _cache_conn = sqlite3.connect(CACHE_PATH)
+        _cache_conn.execute(
+            "CREATE TABLE IF NOT EXISTS llm_cache ("
+            " key TEXT PRIMARY KEY, model TEXT, response TEXT,"
+            " created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        _cache_conn.execute(
+            "CREATE TABLE IF NOT EXISTS embed_cache ("
+            " key TEXT PRIMARY KEY, model TEXT, dims INTEGER, vec TEXT)"
+        )
+        _cache_conn.commit()
+    return _cache_conn
 
 
 def load_env(path: str | Path = ".env") -> None:
@@ -53,14 +77,6 @@ def _api_key() -> str:
             "GEMINI_API_KEY is not set. Put it in .env - see README setup."
         )
     return key
-
-
-def _cache(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS llm_cache ("
-        " key TEXT PRIMARY KEY, model TEXT, response TEXT,"
-        " created_at TEXT NOT NULL DEFAULT (datetime('now')))"
-    )
 
 
 def _post(model: str, body: dict) -> dict:
@@ -92,7 +108,6 @@ def complete(
     *,
     model: str = EXTRACT_MODEL,
     schema: dict | None = None,
-    conn: sqlite3.Connection | None = None,
 ) -> str:
     """One completion. Pass `schema` to force a JSON response shape."""
     # Temperature 0: a knowledge layer whose facts change between runs is not
@@ -112,13 +127,10 @@ def complete(
         json.dumps([model, body], sort_keys=True).encode("utf-8")
     ).hexdigest()
 
-    if conn is not None:
-        _cache(conn)
-        hit = conn.execute(
-            "SELECT response FROM llm_cache WHERE key=?", (key,)
-        ).fetchone()
-        if hit:
-            return hit[0]
+    c = cache()
+    hit = c.execute("SELECT response FROM llm_cache WHERE key=?", (key,)).fetchone()
+    if hit:
+        return hit[0]
 
     data = _post(model, body)
     try:
@@ -127,28 +139,26 @@ def complete(
         # A blocked or truncated response is a real outcome, not a crash site.
         raise RuntimeError(f"no text in response: {json.dumps(data)[:400]}") from e
 
-    if conn is not None:
-        conn.execute(
-            "INSERT OR REPLACE INTO llm_cache (key, model, response) VALUES (?,?,?)",
-            (key, model, text),
-        )
-        conn.commit()
+    c.execute(
+        "INSERT OR REPLACE INTO llm_cache (key, model, response) VALUES (?,?,?)",
+        (key, model, text),
+    )
+    c.commit()
     return text
 
 
 def demo():
     """Self-check: schema enforcement, and that the cache actually returns."""
-    conn = sqlite3.connect(":memory:")
     schema = {
         "type": "object",
         "properties": {"answer": {"type": "integer"}},
         "required": ["answer"],
     }
-    out = complete("What is 6 times 7? Respond as JSON.", schema=schema, conn=conn)
+    out = complete("What is 6 times 7? Respond as JSON.", schema=schema)
     assert json.loads(out)["answer"] == 42, out
 
     t0 = time.monotonic()
-    again = complete("What is 6 times 7? Respond as JSON.", schema=schema, conn=conn)
+    again = complete("What is 6 times 7? Respond as JSON.", schema=schema)
     assert again == out
     assert time.monotonic() - t0 < 1.0, "second call should have hit the cache"
     print("llm ok:", out.strip())
@@ -166,18 +176,10 @@ EMBED_ENDPOINT = (
 )
 
 
-def _embed_cache(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS embed_cache ("
-        " key TEXT PRIMARY KEY, model TEXT, dims INTEGER, vec TEXT)"
-    )
-
-
 def embed_many(
     texts: list[str],
     *,
     model: str = EMBED_MODEL,
-    conn: sqlite3.Connection | None = None,
 ) -> list[list[float]]:
     """Embed texts, batched and cached. Order matches the input."""
     if not texts:
@@ -188,11 +190,11 @@ def embed_many(
     ]
     out: dict[str, list[float]] = {}
 
-    if conn is not None:
-        _embed_cache(conn)
+    c = cache()
+    if True:
         for chunk in range(0, len(keys), 500):
             part = keys[chunk:chunk + 500]
-            rows = conn.execute(
+            rows = c.execute(
                 f"SELECT key, vec FROM embed_cache WHERE key IN"
                 f" ({','.join('?' * len(part))})", part
             ).fetchall()
@@ -240,13 +242,13 @@ def embed_many(
         vecs = [e["values"] for e in data["embeddings"]]
         for (k, _), v in zip(batch, vecs):
             out[k] = v
-        if conn is not None:
-            conn.executemany(
+        if True:
+            c.executemany(
                 "INSERT OR REPLACE INTO embed_cache (key, model, dims, vec)"
                 " VALUES (?,?,?,?)",
                 [(k, model, EMBED_DIMS, json.dumps(v))
                  for (k, _), v in zip(batch, vecs)],
             )
-            conn.commit()
+            c.commit()
 
     return [out[k] for k in keys]

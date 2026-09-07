@@ -101,7 +101,11 @@ CREATE TABLE IF NOT EXISTS facts (
     modality     TEXT NOT NULL,
     approximate  INTEGER NOT NULL DEFAULT 0,
     confidence   REAL,
-    block_ids    TEXT NOT NULL,             -- JSON list; grounding
+    block_ids    TEXT NOT NULL,             -- JSON list; provenance
+    -- Literals the cited blocks do not support. Provenance is not accuracy:
+    -- a claim can cite the right block and still misread it. JSON list, empty
+    -- when the claim's own numbers and dates appear in what it cites.
+    grounding_issues TEXT NOT NULL DEFAULT '[]',
     source_modality TEXT NOT NULL DEFAULT 'text',
     created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );

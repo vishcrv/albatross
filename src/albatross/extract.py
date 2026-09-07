@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from . import llm, store
+from . import grounding, llm, store
 
 CLAIM_SCHEMA = {
     "type": "object",
@@ -75,6 +75,21 @@ DOCUMENT CONTEXT
 PAGE BLOCKS
 {blocks}
 
+Facts are not only numbers. Extract with equal care:
+
+- quantities, amounts, counts, rates, dates;
+- who holds or held a role, and in what capacity;
+- state changes - an appointment, a resignation, a cessation, a merger, a
+  renaming, a change of address - together with the date it took effect;
+- relationships between organisations and people - ownership, subsidiary,
+  nominee, auditor, registrar;
+- statuses and classifications, including identifiers such as registration
+  numbers.
+
+A page of prose with no figures on it should still yield facts. If you find
+yourself returning only numeric claims from a page that also narrates events,
+you have missed the events.
+
 Extract every substantive factual assertion. For each one:
 
 - `claim_text`: a single self-contained sentence. Resolve every pronoun,
@@ -126,26 +141,34 @@ def extract_page(conn, doc_id: str, page_index: int, context: str = "") -> list[
         for b in blocks
     )
     prompt = PROMPT.format(context=context or "(none given)", blocks=rendered)
-    raw = llm.complete(prompt, schema=CLAIM_SCHEMA, conn=conn)
+    raw = llm.complete(prompt, schema=CLAIM_SCHEMA)
 
-    valid_ids = {b["ord"] for b in blocks}
+    by_ord = {b["ord"]: b["text"] for b in blocks}
+    valid_ids = set(by_ord)
     kept: list[dict] = []
     for c in json.loads(raw).get("claims", []):
         cited = [i for i in c.get("block_ids", []) if i in valid_ids]
         if not cited:
             continue                      # ungrounded: drop, do not trust
         c["block_ids"] = cited
+        cited_text = " ".join(by_ord[i] for i in cited)
+        # Provenance is not accuracy - check the claim's own literals against
+        # the blocks it points at. Flagged, never dropped: an inherited
+        # qualifier legitimately fails this and is still worth keeping.
+        c["grounding_issues"] = grounding.check(c, cited_text)
         kept.append(c)
 
     conn.executemany(
         "INSERT INTO facts (id, doc_id, page_index, claim_text, subject, predicate,"
         " object_text, value, unit, value_type, qualifiers, modality, approximate,"
-        " confidence, block_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " confidence, block_ids, grounding_issues)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
             (str(uuid.uuid4()), doc_id, page_index, c["claim_text"], c["subject"],
              c["predicate"], c["object_text"], c.get("value"), c.get("unit"),
              c["value_type"], json.dumps(c["qualifiers"]), c["modality"],
-             int(c["approximate"]), c["confidence"], json.dumps(c["block_ids"]))
+             int(c["approximate"]), c["confidence"], json.dumps(c["block_ids"]),
+             json.dumps(c["grounding_issues"]))
             for c in kept
         ],
     )
@@ -208,7 +231,7 @@ def document_context(conn, doc_id: str, sample_pages: int = 2) -> str:
     )[:12000]
 
     raw = llm.complete(
-        CONTEXT_PROMPT.format(pages=text), schema=CONTEXT_SCHEMA, conn=conn
+        CONTEXT_PROMPT.format(pages=text), schema=CONTEXT_SCHEMA
     )
     d = json.loads(raw)
     card = (f"{d['issuer']} - {d['doc_type']}. Reporting period: "
