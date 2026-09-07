@@ -50,6 +50,9 @@ def main(argv=None):
     ing.add_argument("--last", type=int, help="last physical page, inclusive")
     ing.add_argument("--db", default="albatross.db")
 
+    ex = sub.add_parser("extract", help="extract claims from ingested pages")
+    ex.add_argument("--db", default="albatross.db")
+
     st = sub.add_parser("status", help="what is in the knowledge layer")
     st.add_argument("--db", default="albatross.db")
 
@@ -58,6 +61,17 @@ def main(argv=None):
         r = ingest(args.db, args.pdf, args.first, args.last)
         print(f"{args.pdf.name}: +{r['pages_added']} pages"
               f" ({r['pages_skipped']} already known)  doc={r['doc_id']}")
+    elif args.cmd == "extract":
+        from .extract import extract_document
+        conn = store.connect(args.db)
+        docs = [r["id"] for r in conn.execute(
+            "SELECT id FROM documents ORDER BY added_at")]
+        for d in docs:
+            title = conn.execute(
+                "SELECT title FROM documents WHERE id=?", (d,)).fetchone()["title"]
+            print(title)
+            print(f"  -> {extract_document(conn, d)} claims")
+        conn.close()
     else:
         conn = store.connect(args.db)
         rows = conn.execute(

@@ -83,3 +83,46 @@ def add_page(conn, doc_id: str, page) -> bool:
         [(doc_id, page.index, b.ord, *b.bbox, b.text) for b in page.blocks],
     )
     return True
+
+
+FACTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS facts (
+    id           TEXT PRIMARY KEY,
+    doc_id       TEXT NOT NULL,
+    page_index   INTEGER NOT NULL,
+    claim_text   TEXT NOT NULL,
+    subject      TEXT NOT NULL,
+    predicate    TEXT NOT NULL,
+    object_text  TEXT NOT NULL,
+    value        REAL,                      -- NULL for non-quantities
+    unit         TEXT,
+    value_type   TEXT NOT NULL,             -- quantity|date|entity|categorical|boolean
+    qualifiers   TEXT NOT NULL,             -- JSON list of {key,value,inherited}
+    modality     TEXT NOT NULL,
+    approximate  INTEGER NOT NULL DEFAULT 0,
+    confidence   REAL,
+    block_ids    TEXT NOT NULL,             -- JSON list; grounding
+    source_modality TEXT NOT NULL DEFAULT 'text',
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS facts_by_page ON facts(doc_id, page_index);
+CREATE INDEX IF NOT EXISTS facts_by_predicate ON facts(predicate);
+"""
+
+
+def ensure_facts(conn) -> None:
+    conn.executescript(FACTS_SCHEMA)
+
+
+def page_row(conn, doc_id: str, page_index: int):
+    return conn.execute(
+        "SELECT * FROM pages WHERE doc_id=? AND page_index=?", (doc_id, page_index)
+    ).fetchone()
+
+
+def page_blocks(conn, doc_id: str, page_index: int):
+    return conn.execute(
+        "SELECT ord, x0, y0, x1, y1, text FROM blocks"
+        " WHERE doc_id=? AND page_index=? ORDER BY ord",
+        (doc_id, page_index),
+    ).fetchall()

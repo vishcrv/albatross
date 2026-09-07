@@ -95,9 +95,15 @@ def complete(
     conn: sqlite3.Connection | None = None,
 ) -> str:
     """One completion. Pass `schema` to force a JSON response shape."""
-    body: dict = {"contents": [{"parts": [{"text": prompt}]}]}
+    # Temperature 0: a knowledge layer whose facts change between runs is not
+    # auditable, and the cache would be keyed on a prompt that no longer
+    # predicts the answer.
+    body: dict = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0},
+    }
     if schema is not None:
-        body["generationConfig"] = {
+        body["generationConfig"] |= {
             "responseMimeType": "application/json",
             "responseSchema": schema,
         }
