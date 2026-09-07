@@ -156,3 +156,97 @@ def demo():
 
 if __name__ == "__main__":
     demo()
+
+
+EMBED_MODEL = os.environ.get("ALBATROSS_EMBED_MODEL", "gemini-embedding-001")
+EMBED_DIMS = 768
+EMBED_BATCH = 100
+EMBED_ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{m}:batchEmbedContents"
+)
+
+
+def _embed_cache(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS embed_cache ("
+        " key TEXT PRIMARY KEY, model TEXT, dims INTEGER, vec TEXT)"
+    )
+
+
+def embed_many(
+    texts: list[str],
+    *,
+    model: str = EMBED_MODEL,
+    conn: sqlite3.Connection | None = None,
+) -> list[list[float]]:
+    """Embed texts, batched and cached. Order matches the input."""
+    if not texts:
+        return []
+    keys = [
+        hashlib.sha256(f"{model}|{EMBED_DIMS}|{t}".encode("utf-8")).hexdigest()
+        for t in texts
+    ]
+    out: dict[str, list[float]] = {}
+
+    if conn is not None:
+        _embed_cache(conn)
+        for chunk in range(0, len(keys), 500):
+            part = keys[chunk:chunk + 500]
+            rows = conn.execute(
+                f"SELECT key, vec FROM embed_cache WHERE key IN"
+                f" ({','.join('?' * len(part))})", part
+            ).fetchall()
+            out.update({r[0]: json.loads(r[1]) for r in rows})
+
+    todo = [(k, t) for k, t in zip(keys, texts) if k not in out]
+    # Deduplicate: identical claim text is common across a corpus.
+    todo = list({k: t for k, t in todo}.items())
+
+    for i in range(0, len(todo), EMBED_BATCH):
+        batch = todo[i:i + EMBED_BATCH]
+        body = {
+            "requests": [
+                {
+                    "model": f"models/{model}",
+                    "content": {"parts": [{"text": t}]},
+                    "outputDimensionality": EMBED_DIMS,
+                }
+                for _, t in batch
+            ]
+        }
+        global _last_call
+        req = urllib.request.Request(
+            EMBED_ENDPOINT.format(m=model),
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "X-goog-api-key": _api_key()},
+            method="POST",
+        )
+        for attempt in range(MAX_ATTEMPTS):
+            wait = MIN_INTERVAL_S - (time.monotonic() - _last_call)
+            if wait > 0:
+                time.sleep(wait)
+            _last_call = time.monotonic()
+            try:
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    data = json.loads(r.read())
+                break
+            except urllib.error.HTTPError as e:
+                if e.code not in (429, 500, 503) or attempt == MAX_ATTEMPTS - 1:
+                    raise RuntimeError(
+                        f"embed HTTP {e.code}: {e.read()[:300]!r}") from e
+                time.sleep(2 ** attempt * 5)
+
+        vecs = [e["values"] for e in data["embeddings"]]
+        for (k, _), v in zip(batch, vecs):
+            out[k] = v
+        if conn is not None:
+            conn.executemany(
+                "INSERT OR REPLACE INTO embed_cache (key, model, dims, vec)"
+                " VALUES (?,?,?,?)",
+                [(k, model, EMBED_DIMS, json.dumps(v))
+                 for (k, _), v in zip(batch, vecs)],
+            )
+            conn.commit()
+
+    return [out[k] for k in keys]
