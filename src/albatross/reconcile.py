@@ -158,15 +158,20 @@ def compare(a: dict, b: dict, keys: set[str]) -> dict | None:
         return None
 
     if missing:
+        # Report only the keys one side actually stated. A key neither fact
+        # mentions is in `missing` because the predicate needs it, but showing
+        # it as [null, null] tells a reader nothing and reads as a bug.
+        shown = {k: (sa.get(k), sb.get(k)) for k in missing
+                 if sa.get(k) is not None or sb.get(k) is not None}
         if agree:
             return {"verdict": "CORROBORATED",
                     "reason_code": "AGREE_ON_SHARED_QUALIFIERS",
-                    "diff": {k: (sa.get(k), sb.get(k)) for k in missing}, **base}
+                    "diff": shown, **base}
         # §5: a required qualifier absent on one side is a data gap, not a
         # conflict. Calling it a contradiction asserts something we cannot know.
         return {"verdict": "INSUFFICIENT_CONTEXT",
                 "reason_code": f"MISSING_QUALIFIER:{missing[0]}",
-                "diff": {k: (sa.get(k), sb.get(k)) for k in missing}, **base}
+                "diff": shown, **base}
 
     if agree:
         return {"verdict": "CORROBORATED", "reason_code": "SAME_CELL_AGREE",
