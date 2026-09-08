@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set nav = 'cells' %}
+{% block title %}Comparison cells{% endblock %}
+{% block body %}
+
+<h1>Comparison cells</h1>
+<p class="lede">
+  Qualifiers become axes. Two values in one square disagree. Two values in
+  neighbouring squares differ because of the axis between them, and that axis
+  is the explanation.
+</p>
+
+<form method="get" action="/cells" class="row">
+  <select name="entity" onchange="this.form.submit()" style="display:none"></select>
+  <select name="predicate" onchange="this.form.submit()" hidden></select>
+  <select name="pair" onchange="
+      var p=this.value.split('|');
+      this.form.entity.value=p[0]; this.form.predicate.value=p[1];
+      this.form.submit();">
+    {% for o in options %}
+      <option value="{{ o.entity_id }}|{{ o.predicate_id }}"
+        {% if o.entity_id == entity and o.predicate_id == predicate %}selected{% endif %}>
+        {{ o.entity }} — {{ o.predicate }} ({{ o.docs }} docs, {{ o.n }} facts)
+      </option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit">Show</button></noscript>
+</form>
+
+{% if g.facts %}
+  <h2>{{ g.axes.row or 'no qualifier' }}
+      {% if g.axes.col %}&times; {{ g.axes.col }}{% endif %}</h2>
+  <div class="scroll"><table>
+    <thead>
+      <tr>
+        <th>{{ g.axes.row or '' }}</th>
+        {% for c in g.cols %}<th>{{ c }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in g.rows %}
+      <tr>
+        <th scope="row" style="border-bottom:1px solid var(--line-soft)">{{ r }}</th>
+        {% for c in g.cols %}
+          {% set members = g.cells.get(r ~ '||' ~ c, []) %}
+          <td>
+            {% for m in members %}
+              <div style="margin-bottom:.3rem">
+                <span class="num" {% if m.conflict %}style="color:var(--bad); font-weight:640"{% endif %}>
+                  {{ m.value | fmt }}</span>
+                <span class="muted mono">{{ m.unit or '' }}</span>
+                <div class="muted mono">{{ m.doc[3:26] }} p{{ m.page }}</div>
+              </div>
+            {% else %}
+              <span class="muted">·</span>
+            {% endfor %}
+          </td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  <p class="muted" style="margin-top:1.2rem; font-size:.85rem; max-width:60ch">
+    {{ g.facts }} facts. A square with two values that disagree beyond the
+    precision their sources printed is the only place a contradiction can
+    live; those figures are marked. An em dash means the fact stated no value
+    for that axis, which is why it cannot be compared rather than why it
+    conflicts.
+  </p>
+{% else %}
+  <p class="muted">Nothing to draw for this pair.</p>
+{% endif %}
+
+{% endblock %}

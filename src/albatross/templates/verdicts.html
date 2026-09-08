@@ -1,64 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Reconciliations - Albatross{% endblock %}
+{% set nav = 'verdicts' %}
+{% block title %}Reconciliations{% endblock %}
 {% block body %}
 
-<h2>Verdict</h2>
-<div class="filters">
-  <a href="/verdicts?entity={{ entity }}&amp;q={{ q }}"
-     class="{% if not verdict %}on{% endif %}">all</a>
+<h1>Reconciliations</h1>
+<p class="lede">
+  Cross-document pairs first. <strong>Insufficient context</strong> is the
+  rejection ledger: comparisons the system declined to call, and why.
+</p>
+
+<div class="row">
+  <a class="pill" href="/verdicts?entity={{ entity }}&amp;q={{ q }}"
+     aria-current="{{ 'false' if verdict else 'true' }}">all</a>
   {% for k, n in kinds %}
-    <a class="{{ k }} {% if verdict == k %}on{% endif %}"
+    <a class="pill {{ k }}" aria-current="{{ 'true' if verdict == k else 'false' }}"
        href="/verdicts?verdict={{ k }}&amp;entity={{ entity }}&amp;q={{ q }}">
-      {{ k.replace('_',' ').lower() }} <span class="muted">{{ n }}</span></a>
+      {{ k.replace('_',' ').lower() }} <span class="num muted">{{ n }}</span></a>
   {% endfor %}
 </div>
 
-<div class="filters">
-  <form method="get" action="/verdicts" style="display:flex; gap:8px;">
-    <input type="hidden" name="verdict" value="{{ verdict }}">
-    <input type="text" name="q" value="{{ q }}" placeholder="search claims"
-           size="26">
-    <select name="entity">
-      <option value="">every entity</option>
-      {% for e in entities %}
-        <option value="{{ e.id }}" {% if entity == e.id %}selected{% endif %}>
-          {{ e.canonical[:46] }} ({{ e.n }})</option>
-      {% endfor %}
-    </select>
-    <button type="submit">Filter</button>
-  </form>
-</div>
+<form method="get" action="/verdicts" class="row" style="margin-top:.9rem">
+  <input type="hidden" name="verdict" value="{{ verdict }}">
+  <input type="search" name="q" value="{{ q }}" placeholder="search claims" size="24">
+  <select name="entity">
+    <option value="">every entity</option>
+    {% for e in entities %}
+      <option value="{{ e.id }}" {% if entity == e.id %}selected{% endif %}>
+        {{ e.canonical[:44] }} ({{ e.n }})</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filter</button>
+</form>
 
-<div class="scroll"><table>
-  <tr>
-    <th>Verdict</th><th>Cell</th><th>A</th><th>B</th><th>Why</th><th></th>
-  </tr>
+<div class="scroll" style="margin-top:1.2rem"><table>
+  <thead><tr>
+    <th>Verdict</th><th>Cell</th><th>A</th><th>B</th><th>Reason</th><th></th>
+  </tr></thead>
+  <tbody>
   {% for r in rows %}
     <tr>
       <td>
         <span class="tag {{ r.verdict }}">{{ r.verdict.replace('_',' ') }}</span>
-        {% if r.cross_document %}
-          <div class="muted mono" style="margin-top:4px">cross-doc</div>
-        {% endif %}
+        {% if r.cross_document %}<div class="muted mono">cross-doc</div>{% endif %}
       </td>
-      <td style="max-width:190px">
-        {{ r.ent or '-' }}
-        <div class="muted">{{ r.pred or '' }}</div>
-      </td>
-      <td style="max-width:280px">
-        <span class="num">{{ r.va | fmt }}</span> {{ r.ua or '' }}
+      <td style="max-width:11rem">{{ r.ent or '—' }}
+        <div class="muted">{{ r.pred or '' }}</div></td>
+      <td style="max-width:15rem">
+        <span class="num">{{ r.va | fmt }}</span>
+        <span class="muted">{{ r.ua or '' }}</span>
         <div class="muted mono">{{ r.qa | qualifiers }}</div>
-        <div class="muted">{{ r.ta[:34] }}</div>
+        <div class="muted mono">{{ r.ta[3:30] }}</div>
       </td>
-      <td style="max-width:280px">
-        <span class="num">{{ r.vb | fmt }}</span> {{ r.ub or '' }}
+      <td style="max-width:15rem">
+        <span class="num">{{ r.vb | fmt }}</span>
+        <span class="muted">{{ r.ub or '' }}</span>
         <div class="muted mono">{{ r.qb | qualifiers }}</div>
-        <div class="muted">{{ r.tb[:34] }}</div>
+        <div class="muted mono">{{ r.tb[3:30] }}</div>
       </td>
-      <td class="mono muted" style="max-width:210px">
-        {{ r.reason_code }}
+      <td class="mono muted" style="max-width:13rem">{{ r.reason_code }}
         {% if r.explanation %}
-          <div style="margin-top:4px">{{ r.explanation[:150] }}</div>
+          <div style="margin-top:.25rem">{{ r.explanation[:130] }}</div>
         {% endif %}
       </td>
       <td><a href="/verdicts/{{ r.id }}">evidence</a></td>
@@ -66,14 +67,15 @@
   {% else %}
     <tr><td colspan="6" class="muted">Nothing matches this filter.</td></tr>
   {% endfor %}
+  </tbody>
 </table></div>
 
-<div class="filters" style="margin-top:18px">
+<div class="row" style="margin-top:1.2rem">
   {% if offset > 0 %}
-    <a href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset - 60 }}">previous</a>
+    <a class="pill" href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset - 60 }}">previous</a>
   {% endif %}
   {% if rows | length == 60 %}
-    <a href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset + 60 }}">next</a>
+    <a class="pill" href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset + 60 }}">next</a>
   {% endif %}
 </div>
 

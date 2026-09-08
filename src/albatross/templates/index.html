@@ -1,63 +1,72 @@
 {% extends "base.html" %}
-{% block title %}Documents - Albatross{% endblock %}
+{% set nav = 'docs' %}
+{% block title %}Documents{% endblock %}
 {% block body %}
 
-<h2>Knowledge layer</h2>
-<div class="filters">
+<h1>Fact knowledge layer</h1>
+<p class="lede">
+  {{ stats.facts }} facts across {{ docs | length }} documents, resolved into
+  {{ stats.entities }} entities and {{ stats.predicates }} predicates.
+</p>
+
+<div class="row">
   {% for kind, n in counts.items() %}
     <a class="pill {{ kind }}" href="/verdicts?verdict={{ kind }}">
-      {{ n }} {{ kind.replace('_',' ').lower() }}</a>
+      <span class="num">{{ n }}</span> {{ kind.replace('_',' ').lower() }}</a>
   {% endfor %}
-  {% if not counts %}<span class="muted">No verdicts yet - run
-    <span class="mono">albatross reconcile</span>.</span>{% endif %}
 </div>
 
 <h2>Documents</h2>
+<div class="stack">
 {% for d in docs %}
   <div class="card">
-    <strong>{{ d.title }}</strong>
-    <span class="muted mono">&nbsp;{{ d.pages }} pages &middot;
-      {{ d.facts }} facts</span>
-    {% if d.context %}
-      <div class="muted" style="margin-top:6px; font-size:13px;">
-        {{ d.context }}</div>
-    {% endif %}
-    <div style="margin-top:8px;">
-      <a class="pill" href="/facts?entity=&amp;q=">browse facts</a>
-      <a class="pill" href="/documents/{{ d.id }}">json</a>
+    <div class="row" style="justify-content:space-between">
+      <strong>{{ d.title }}</strong>
+      <span class="muted mono num">{{ d.pages }} pages · {{ d.facts }} facts</span>
     </div>
+    {% if d.context %}
+      <p class="muted" style="margin:.5rem 0 0; font-size:.85rem">{{ d.context }}</p>
+    {% endif %}
   </div>
 {% else %}
   <p class="muted">Nothing ingested yet.</p>
 {% endfor %}
+</div>
 
 <h2>Add a document</h2>
 <div class="card">
-  <form action="/documents" method="post" enctype="multipart/form-data">
+  <form action="/documents" method="post" enctype="multipart/form-data" class="row">
     <input type="file" name="file" accept="application/pdf" required>
-    <input type="text" name="first" placeholder="first page" size="8">
-    <input type="text" name="last" placeholder="last page" size="8">
+    <input type="text" name="first" placeholder="first page" size="7" inputmode="numeric">
+    <input type="text" name="last" placeholder="last page" size="7" inputmode="numeric">
     <button type="submit">Ingest</button>
-    <div class="muted" style="margin-top:8px; font-size:13px;">
-      Leave the page range blank to process the whole file. Extraction runs in
-      the background; a page already in the layer is skipped, so re-uploading
-      the same PDF costs nothing.
-    </div>
   </form>
+  <p class="muted" style="margin:.7rem 0 0; font-size:.85rem; max-width:62ch">
+    Leave the range blank for the whole file. Extraction runs in the
+    background. Pages are keyed by content hash, so re-uploading the same PDF
+    costs nothing and an overlapping range adds only what is new.
+  </p>
 </div>
 
 {% if jobs %}
-  <h2>Recent uploads</h2>
+  <h2>Uploads</h2>
   <div class="scroll"><table>
-    <tr><th>File</th><th>Status</th><th>Detail</th><th>Started</th></tr>
+    <thead><tr><th>File</th><th>Status</th><th>Detail</th><th>Started</th></tr></thead>
+    <tbody>
     {% for j in jobs %}
       <tr>
         <td>{{ j.filename }}</td>
-        <td><span class="tag">{{ j.status }}</span></td>
-        <td class="mono muted">{{ (j.detail or '')[:120] }}</td>
-        <td class="muted mono">{{ j.started_at }}</td>
+        <td>
+          {% if j.status == 'failed' %}{% set state = 'CONTRADICTION' %}
+          {% elif j.status == 'done' %}{% set state = 'CORROBORATED' %}
+          {% else %}{% set state = 'INSUFFICIENT_CONTEXT' %}{% endif %}
+          <span class="tag {{ state }}">{{ j.status }}</span>
+        </td>
+        <td class="mono muted">{{ (j.detail or '')[:110] }}</td>
+        <td class="mono muted">{{ j.started_at }}</td>
       </tr>
     {% endfor %}
+    </tbody>
   </table></div>
 {% endif %}
 

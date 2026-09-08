@@ -5,73 +5,134 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}Albatross{% endblock %}</title>
 <style>
+  /* One accent, warm neutrals biased toward it, and four semantic colours
+     that carry verdict state. Semantic colour is not the accent. */
   :root {
-    --bg: #fbfaf8; --fg: #23201c; --muted: #6d6459; --line: #e2ddd5;
-    --card: #fff; --accent: #b4471f;
-    --corr: #2f6f4e; --contra: #a32b2b; --variant: #7a5a12; --insuf: #5b5b66;
+    --bg:#faf9f7; --surface:#fff; --fg:#1c1a17; --muted:#6f6862;
+    --line:#e6e1da; --line-soft:#f0ece6; --accent:#a8451c;
+    --ok:#2c6a4a; --warn:#8a6410; --bad:#9c2c2c; --neutral:#5f5f6b;
+    --radius:7px;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#171614; --fg:#eae6e0; --muted:#9b938a; --line:#33302c;
-            --card:#1f1e1b; --accent:#e08050;
-            --corr:#6fbf8f; --contra:#e07070; --variant:#d4ad5a;
-            --insuf:#9a9aa8; }
+    :root:not([data-theme="light"]) {
+      --bg:#151412; --surface:#1d1c19; --fg:#ece8e2; --muted:#a09890;
+      --line:#302d29; --line-soft:#25231f; --accent:#e2825a;
+      --ok:#6cbb92; --warn:#d3aa5c; --bad:#e07d7d; --neutral:#a0a0ad;
+    }
   }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55
-    ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { border-bottom:1px solid var(--line); padding:14px 22px;
-    display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
-  header h1 { font-size:17px; margin:0; letter-spacing:-.01em; }
-  header a { color:var(--muted); text-decoration:none; }
-  header a:hover, header a.on { color:var(--fg); }
-  main { max-width:1080px; margin:0 auto; padding:24px 22px 64px; }
-  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.07em;
-       color:var(--muted); font-weight:600; margin:32px 0 12px; }
-  a { color:var(--accent); }
-  .card { background:var(--card); border:1px solid var(--line);
-          border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+  :root[data-theme="dark"] {
+    --bg:#151412; --surface:#1d1c19; --fg:#ece8e2; --muted:#a09890;
+    --line:#302d29; --line-soft:#25231f; --accent:#e2825a;
+    --ok:#6cbb92; --warn:#d3aa5c; --bad:#e07d7d; --neutral:#a0a0ad;
+  }
+
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font:1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-synthesis-weight:none;
+  }
+
+  /* Translucent chrome; content scrolls under it. */
+  header {
+    position:sticky; top:0; z-index:10;
+    display:flex; gap:1.5rem; align-items:baseline; flex-wrap:wrap;
+    padding:.85rem 1.5rem;
+    background:color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter:blur(14px) saturate(160%);
+    border-bottom:1px solid var(--line-soft);
+  }
+  header b { font-size:.95rem; letter-spacing:-.01em; font-weight:650; }
+  nav { display:flex; gap:1.15rem; }
+  nav a {
+    color:var(--muted); text-decoration:none; font-size:.9rem;
+    padding-bottom:2px; border-bottom:1.5px solid transparent;
+  }
+  nav a:hover { color:var(--fg); }
+  nav a[aria-current="page"] { color:var(--fg); border-bottom-color:var(--accent); }
+
+  main { max-width:70rem; margin:0 auto; padding:2rem 1.5rem 5rem; }
+
+  /* Tighter tracking as type grows; body stays near zero. */
+  h1 { font-size:1.5rem; line-height:1.2; letter-spacing:-.02em; margin:0 0 .35rem;
+       text-wrap:balance; font-weight:640; }
+  h2 { font-size:.72rem; text-transform:uppercase; letter-spacing:.09em;
+       color:var(--muted); font-weight:640; margin:2.25rem 0 .7rem; }
+  p.lede { color:var(--muted); margin:0 0 1.5rem; max-width:58ch; }
+  a { color:var(--accent); text-decoration-thickness:1px;
+      text-underline-offset:2px; }
+
+  .stack { display:flex; flex-direction:column; gap:.6rem; }
+  .row { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+
+  .card { background:var(--surface); border:1px solid var(--line);
+          border-radius:var(--radius); padding:.9rem 1.05rem; }
   .muted { color:var(--muted); }
-  .mono { font-family:ui-monospace, "SF Mono", Consolas, monospace;
-          font-size:12.5px; }
-  .tag { display:inline-block; font-size:11px; font-weight:650;
-         letter-spacing:.05em; padding:2px 7px; border-radius:4px;
-         border:1px solid currentColor; }
-  .CORROBORATED { color:var(--corr); }
-  .CONTRADICTION { color:var(--contra); }
-  .VARIANT_EXPLAINED_BY { color:var(--variant); }
-  .INSUFFICIENT_CONTEXT { color:var(--insuf); }
-  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;
-             align-items:center; }
-  .filters a, .pill { font-size:12.5px; padding:4px 10px; border-radius:20px;
-    border:1px solid var(--line); text-decoration:none; color:var(--muted);
-    background:var(--card); }
-  .filters a.on { border-color:currentColor; }
-  input, select, button { font:inherit; padding:6px 9px; border-radius:6px;
-    border:1px solid var(--line); background:var(--card); color:var(--fg); }
-  button { cursor:pointer; }
-  table { width:100%; border-collapse:collapse; font-size:13.5px; }
-  td, th { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line);
-           vertical-align:top; }
-  th { color:var(--muted); font-weight:600; font-size:11.5px;
-       text-transform:uppercase; letter-spacing:.05em; }
-  .num { text-align:right; font-family:ui-monospace, Consolas, monospace;
-         white-space:nowrap; }
-  img.crop { max-width:100%; border:1px solid var(--line); border-radius:6px;
-             display:block; margin-top:8px; background:#fff; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:780px) { .grid2 { grid-template-columns:1fr; } }
+  .mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace;
+          font-size:.78rem; }
+  .num { font-variant-numeric:tabular-nums; }
+
+  /* Verdict state reads as colour + shape, before the label is read. */
+  .tag { display:inline-flex; align-items:center; gap:.35rem;
+         font-size:.68rem; font-weight:660; letter-spacing:.055em;
+         text-transform:uppercase; padding:.2rem .5rem; border-radius:4px;
+         border:1px solid currentColor; white-space:nowrap; }
+  .tag::before { content:""; width:5px; height:5px; border-radius:50%;
+                 background:currentColor; }
+  .CORROBORATED { color:var(--ok); }
+  .CONTRADICTION { color:var(--bad); }
+  .VARIANT_EXPLAINED_BY { color:var(--warn); }
+  .INSUFFICIENT_CONTEXT { color:var(--neutral); }
+
+  .pill { display:inline-block; font-size:.8rem; padding:.28rem .7rem;
+          border-radius:999px; border:1px solid var(--line);
+          background:var(--surface); color:var(--muted);
+          text-decoration:none; transition:transform 90ms ease-out; }
+  .pill:hover { color:var(--fg); }
+  .pill:active { transform:scale(.97); }
+  .pill[aria-current="true"] { color:var(--fg); border-color:currentColor; }
+
+  input, select, button { font:inherit; font-size:.875rem;
+    padding:.4rem .6rem; border-radius:6px; border:1px solid var(--line);
+    background:var(--surface); color:var(--fg); }
+  button { cursor:pointer; font-weight:560; transition:transform 90ms ease-out; }
+  button:active { transform:scale(.97); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
   .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th { text-align:left; font-size:.68rem; text-transform:uppercase;
+       letter-spacing:.07em; color:var(--muted); font-weight:640;
+       padding:.5rem .7rem; border-bottom:1px solid var(--line); }
+  td { padding:.65rem .7rem; border-bottom:1px solid var(--line-soft);
+       vertical-align:top; }
+  tbody tr:hover { background:var(--line-soft); }
+
+  img.crop { max-width:100%; border:1px solid var(--line);
+             border-radius:6px; display:block; margin-top:.65rem;
+             background:#fff; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:.9rem; }
+  @media (max-width:820px) { .grid2 { grid-template-columns:1fr; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition:none !important; animation:none !important; }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    header { background:var(--bg); backdrop-filter:none; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <h1>Albatross</h1>
-  <nav style="display:flex; gap:16px;">
-    <a href="/">Documents</a>
-    <a href="/verdicts">Reconciliations</a>
-    <a href="/facts">Facts</a>
+  <b>Albatross</b>
+  <nav>
+    <a href="/" {% if nav=='docs' %}aria-current="page"{% endif %}>Documents</a>
+    <a href="/verdicts" {% if nav=='verdicts' %}aria-current="page"{% endif %}>Reconciliations</a>
+    <a href="/cells" {% if nav=='cells' %}aria-current="page"{% endif %}>Cells</a>
+    <a href="/facts" {% if nav=='facts' %}aria-current="page"{% endif %}>Facts</a>
+    <a href="/docs">API</a>
   </nav>
-  <span class="muted mono" style="margin-left:auto">fact knowledge layer</span>
 </header>
 <main>{% block body %}{% endblock %}</main>
 </body>
