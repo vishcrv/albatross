@@ -62,6 +62,10 @@ def main(argv=None):
     rc.add_argument("--judge", action="store_true",
                     help="also run the LLM pair judge on gated non-numeric pairs")
 
+    sv = sub.add_parser("serve", help="run the web UI and API")
+    sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--host", default="127.0.0.1")
+
     st = sub.add_parser("status", help="what is in the knowledge layer")
     st.add_argument("--db", default="albatross.db")
 
@@ -70,6 +74,9 @@ def main(argv=None):
         r = ingest(args.db, args.pdf, args.first, args.last)
         print(f"{args.pdf.name}: +{r['pages_added']} pages"
               f" ({r['pages_skipped']} already known)  doc={r['doc_id']}")
+    elif args.cmd == "serve":
+        import uvicorn
+        uvicorn.run("albatross.api:app", host=args.host, port=args.port)
     elif args.cmd == "resolve":
         from .resolve import resolve_all
         conn = store.connect(args.db)

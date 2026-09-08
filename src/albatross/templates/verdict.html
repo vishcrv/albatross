@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{{ r.verdict }} - Albatross{% endblock %}
+{% block body %}
+
+<p><a href="/verdicts?verdict={{ r.verdict }}">&larr; all
+  {{ r.verdict.replace('_',' ').lower() }}</a></p>
+
+<h2>Verdict</h2>
+<div class="card">
+  <span class="tag {{ r.verdict }}">{{ r.verdict.replace('_',' ') }}</span>
+  <span class="mono muted">&nbsp;{{ r.reason_code }}</span>
+  {% if r.cross_document %}<span class="mono muted">&nbsp;cross-document</span>
+  {% endif %}
+  <span class="mono muted">&nbsp;trust: {{ r.trust }}</span>
+
+  <div style="margin-top:10px">
+    <strong>{{ r.ent or 'unresolved entity' }}</strong>
+    <span class="muted">&middot; {{ r.pred or 'unresolved predicate' }}</span>
+  </div>
+
+  {% if r.delta is not none %}
+    <div class="mono muted" style="margin-top:8px">
+      delta {{ '%.2f' | format(r.delta) }} &middot;
+      tolerance {{ '%.2f' | format(r.tolerance) }} &middot;
+      {% if r.delta <= r.tolerance %}within{% else %}outside{% endif %} tolerance
+    </div>
+  {% endif %}
+
+  {% if r.qualifier_diff and r.qualifier_diff != '{}' %}
+    <div class="mono" style="margin-top:8px">
+      qualifier difference: {{ r.qualifier_diff }}
+    </div>
+  {% endif %}
+
+  {% if r.explanation %}
+    <div style="margin-top:10px; padding-left:12px;
+                border-left:2px solid var(--line);">
+      {{ r.explanation }}
+    </div>
+  {% endif %}
+</div>
+
+<h2>Evidence</h2>
+<div class="grid2">
+  {% for side in [
+      {'tag':'A','claim':r.ca,'val':r.va,'unit':r.ua,'q':r.qa,'g':r.ga,
+       'doc':r.ta,'page':r.pa,'labels':r.la,'fid':r.aid},
+      {'tag':'B','claim':r.cb,'val':r.vb,'unit':r.ub,'q':r.qb,'g':r.gb,
+       'doc':r.tb,'page':r.pb,'labels':r.lb,'fid':r.bid}] %}
+    <div class="card">
+      <div class="muted mono">{{ side.tag }} &middot; {{ side.doc }}</div>
+      <div style="margin:8px 0">{{ side.claim }}</div>
+      <div class="mono">
+        <strong>{{ side.val | fmt }}</strong> {{ side.unit or '' }}
+      </div>
+      <div class="mono muted">{{ side.q | qualifiers }}</div>
+      <div class="mono muted" style="margin-top:6px">
+        pdf page {{ side.page + 1 }}
+        {% if side.labels and side.labels != '[]' %}
+          &middot; printed {{ side.labels }}
+        {% endif %}
+      </div>
+      {% if side.g and side.g != '[]' %}
+        <div class="mono" style="margin-top:6px; color:var(--contra)">
+          unsupported literals: {{ side.g }}
+        </div>
+      {% endif %}
+      <img class="crop" src="/evidence/{{ side.fid }}.png"
+           alt="page region for claim {{ side.tag }}" loading="lazy">
+    </div>
+  {% endfor %}
+</div>
+
+<p class="muted" style="margin-top:20px; font-size:13px;">
+  Each crop is the region of the source page the claim was read from, with the
+  cited layout blocks outlined. Nothing here is retyped from the model's output
+  &mdash; the boxes come from the PDF itself.
+</p>
+
+{% endblock %}

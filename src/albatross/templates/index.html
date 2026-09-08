@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Documents - Albatross{% endblock %}
+{% block body %}
+
+<h2>Knowledge layer</h2>
+<div class="filters">
+  {% for kind, n in counts.items() %}
+    <a class="pill {{ kind }}" href="/verdicts?verdict={{ kind }}">
+      {{ n }} {{ kind.replace('_',' ').lower() }}</a>
+  {% endfor %}
+  {% if not counts %}<span class="muted">No verdicts yet - run
+    <span class="mono">albatross reconcile</span>.</span>{% endif %}
+</div>
+
+<h2>Documents</h2>
+{% for d in docs %}
+  <div class="card">
+    <strong>{{ d.title }}</strong>
+    <span class="muted mono">&nbsp;{{ d.pages }} pages &middot;
+      {{ d.facts }} facts</span>
+    {% if d.context %}
+      <div class="muted" style="margin-top:6px; font-size:13px;">
+        {{ d.context }}</div>
+    {% endif %}
+    <div style="margin-top:8px;">
+      <a class="pill" href="/facts?entity=&amp;q=">browse facts</a>
+      <a class="pill" href="/documents/{{ d.id }}">json</a>
+    </div>
+  </div>
+{% else %}
+  <p class="muted">Nothing ingested yet.</p>
+{% endfor %}
+
+<h2>Add a document</h2>
+<div class="card">
+  <form action="/documents" method="post" enctype="multipart/form-data">
+    <input type="file" name="file" accept="application/pdf" required>
+    <input type="text" name="first" placeholder="first page" size="8">
+    <input type="text" name="last" placeholder="last page" size="8">
+    <button type="submit">Ingest</button>
+    <div class="muted" style="margin-top:8px; font-size:13px;">
+      Leave the page range blank to process the whole file. Extraction runs in
+      the background; a page already in the layer is skipped, so re-uploading
+      the same PDF costs nothing.
+    </div>
+  </form>
+</div>
+
+{% if jobs %}
+  <h2>Recent uploads</h2>
+  <div class="scroll"><table>
+    <tr><th>File</th><th>Status</th><th>Detail</th><th>Started</th></tr>
+    {% for j in jobs %}
+      <tr>
+        <td>{{ j.filename }}</td>
+        <td><span class="tag">{{ j.status }}</span></td>
+        <td class="mono muted">{{ (j.detail or '')[:120] }}</td>
+        <td class="muted mono">{{ j.started_at }}</td>
+      </tr>
+    {% endfor %}
+  </table></div>
+{% endif %}
+
+{% endblock %}

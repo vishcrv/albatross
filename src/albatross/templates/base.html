@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Albatross{% endblock %}</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --fg: #23201c; --muted: #6d6459; --line: #e2ddd5;
+    --card: #fff; --accent: #b4471f;
+    --corr: #2f6f4e; --contra: #a32b2b; --variant: #7a5a12; --insuf: #5b5b66;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#171614; --fg:#eae6e0; --muted:#9b938a; --line:#33302c;
+            --card:#1f1e1b; --accent:#e08050;
+            --corr:#6fbf8f; --contra:#e07070; --variant:#d4ad5a;
+            --insuf:#9a9aa8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55
+    ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { border-bottom:1px solid var(--line); padding:14px 22px;
+    display:flex; gap:20px; align-items:baseline; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; letter-spacing:-.01em; }
+  header a { color:var(--muted); text-decoration:none; }
+  header a:hover, header a.on { color:var(--fg); }
+  main { max-width:1080px; margin:0 auto; padding:24px 22px 64px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.07em;
+       color:var(--muted); font-weight:600; margin:32px 0 12px; }
+  a { color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line);
+          border-radius:8px; padding:14px 16px; margin-bottom:10px; }
+  .muted { color:var(--muted); }
+  .mono { font-family:ui-monospace, "SF Mono", Consolas, monospace;
+          font-size:12.5px; }
+  .tag { display:inline-block; font-size:11px; font-weight:650;
+         letter-spacing:.05em; padding:2px 7px; border-radius:4px;
+         border:1px solid currentColor; }
+  .CORROBORATED { color:var(--corr); }
+  .CONTRADICTION { color:var(--contra); }
+  .VARIANT_EXPLAINED_BY { color:var(--variant); }
+  .INSUFFICIENT_CONTEXT { color:var(--insuf); }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;
+             align-items:center; }
+  .filters a, .pill { font-size:12.5px; padding:4px 10px; border-radius:20px;
+    border:1px solid var(--line); text-decoration:none; color:var(--muted);
+    background:var(--card); }
+  .filters a.on { border-color:currentColor; }
+  input, select, button { font:inherit; padding:6px 9px; border-radius:6px;
+    border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  button { cursor:pointer; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  td, th { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line);
+           vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:11.5px;
+       text-transform:uppercase; letter-spacing:.05em; }
+  .num { text-align:right; font-family:ui-monospace, Consolas, monospace;
+         white-space:nowrap; }
+  img.crop { max-width:100%; border:1px solid var(--line); border-radius:6px;
+             display:block; margin-top:8px; background:#fff; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:780px) { .grid2 { grid-template-columns:1fr; } }
+  .scroll { overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Albatross</h1>
+  <nav style="display:flex; gap:16px;">
+    <a href="/">Documents</a>
+    <a href="/verdicts">Reconciliations</a>
+    <a href="/facts">Facts</a>
+  </nav>
+  <span class="muted mono" style="margin-left:auto">fact knowledge layer</span>
+</header>
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

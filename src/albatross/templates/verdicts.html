@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Reconciliations - Albatross{% endblock %}
+{% block body %}
+
+<h2>Verdict</h2>
+<div class="filters">
+  <a href="/verdicts?entity={{ entity }}&amp;q={{ q }}"
+     class="{% if not verdict %}on{% endif %}">all</a>
+  {% for k, n in kinds %}
+    <a class="{{ k }} {% if verdict == k %}on{% endif %}"
+       href="/verdicts?verdict={{ k }}&amp;entity={{ entity }}&amp;q={{ q }}">
+      {{ k.replace('_',' ').lower() }} <span class="muted">{{ n }}</span></a>
+  {% endfor %}
+</div>
+
+<div class="filters">
+  <form method="get" action="/verdicts" style="display:flex; gap:8px;">
+    <input type="hidden" name="verdict" value="{{ verdict }}">
+    <input type="text" name="q" value="{{ q }}" placeholder="search claims"
+           size="26">
+    <select name="entity">
+      <option value="">every entity</option>
+      {% for e in entities %}
+        <option value="{{ e.id }}" {% if entity == e.id %}selected{% endif %}>
+          {{ e.canonical[:46] }} ({{ e.n }})</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+  </form>
+</div>
+
+<div class="scroll"><table>
+  <tr>
+    <th>Verdict</th><th>Cell</th><th>A</th><th>B</th><th>Why</th><th></th>
+  </tr>
+  {% for r in rows %}
+    <tr>
+      <td>
+        <span class="tag {{ r.verdict }}">{{ r.verdict.replace('_',' ') }}</span>
+        {% if r.cross_document %}
+          <div class="muted mono" style="margin-top:4px">cross-doc</div>
+        {% endif %}
+      </td>
+      <td style="max-width:190px">
+        {{ r.ent or '-' }}
+        <div class="muted">{{ r.pred or '' }}</div>
+      </td>
+      <td style="max-width:280px">
+        <span class="num">{{ r.va | fmt }}</span> {{ r.ua or '' }}
+        <div class="muted mono">{{ r.qa | qualifiers }}</div>
+        <div class="muted">{{ r.ta[:34] }}</div>
+      </td>
+      <td style="max-width:280px">
+        <span class="num">{{ r.vb | fmt }}</span> {{ r.ub or '' }}
+        <div class="muted mono">{{ r.qb | qualifiers }}</div>
+        <div class="muted">{{ r.tb[:34] }}</div>
+      </td>
+      <td class="mono muted" style="max-width:210px">
+        {{ r.reason_code }}
+        {% if r.explanation %}
+          <div style="margin-top:4px">{{ r.explanation[:150] }}</div>
+        {% endif %}
+      </td>
+      <td><a href="/verdicts/{{ r.id }}">evidence</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Nothing matches this filter.</td></tr>
+  {% endfor %}
+</table></div>
+
+<div class="filters" style="margin-top:18px">
+  {% if offset > 0 %}
+    <a href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset - 60 }}">previous</a>
+  {% endif %}
+  {% if rows | length == 60 %}
+    <a href="/verdicts?verdict={{ verdict }}&amp;entity={{ entity }}&amp;q={{ q }}&amp;offset={{ offset + 60 }}">next</a>
+  {% endif %}
+</div>
+
+{% endblock %}
