@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "albatross"
+version = "0.1.0"
+description = "A fact knowledge layer over PDFs"
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf>=1.24",
+    "numpy>=1.26",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+]
+
+[project.scripts]
+albatross = "albatross.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+albatross = ["templates/*.html"]

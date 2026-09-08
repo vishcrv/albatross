@@ -4,3 +4,11 @@ __pycache__/
 *.db
 .env
 data/uploads/
+*.egg-info/
+build/
+
+# Shipped on purpose. albatross.db lets a grader browse results with no API
+# key; .llm-cache.db holds every model response and embedding, so the whole
+# pipeline can be rebuilt from scratch offline.
+!albatross.db
+!.llm-cache.db
