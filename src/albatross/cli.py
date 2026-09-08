@@ -53,6 +53,14 @@ def main(argv=None):
     ex = sub.add_parser("extract", help="extract claims from ingested pages")
     ex.add_argument("--db", default="albatross.db")
 
+    rs = sub.add_parser("resolve", help="build entity and predicate registries")
+    rs.add_argument("--db", default="albatross.db")
+
+    rc = sub.add_parser("reconcile", help="compare facts and record verdicts")
+    rc.add_argument("--db", default="albatross.db")
+    rc.add_argument("--judge", action="store_true",
+                    help="also run the LLM pair judge on gated non-numeric pairs")
+
     st = sub.add_parser("status", help="what is in the knowledge layer")
     st.add_argument("--db", default="albatross.db")
 
@@ -61,6 +69,23 @@ def main(argv=None):
         r = ingest(args.db, args.pdf, args.first, args.last)
         print(f"{args.pdf.name}: +{r['pages_added']} pages"
               f" ({r['pages_skipped']} already known)  doc={r['doc_id']}")
+    elif args.cmd == "resolve":
+        from .resolve import resolve_all
+        conn = store.connect(args.db)
+        r = resolve_all(conn)
+        print(f"{r['entities']} entities, {r['predicates']} predicates")
+        conn.close()
+    elif args.cmd == "reconcile":
+        from . import reconcile
+        conn = store.connect(args.db)
+        counts = reconcile.run(conn)
+        for k, v in sorted(counts.items(), key=lambda kv: -kv[1]):
+            print(f"  {v:>5}  {k}")
+        if args.judge:
+            from . import judge
+            print("judging non-numeric pairs...")
+            print("  ", judge.run_and_store(conn))
+        conn.close()
     elif args.cmd == "extract":
         from .extract import extract_document
         conn = store.connect(args.db)

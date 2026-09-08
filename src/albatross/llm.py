@@ -28,7 +28,10 @@ MAX_ATTEMPTS = 5
 
 EXTRACT_MODEL = os.environ.get("ALBATROSS_EXTRACT_MODEL", "gemini-3.5-flash-lite")
 JUDGE_MODEL = os.environ.get("ALBATROSS_JUDGE_MODEL", "gemini-3.8-flash")
-FALLBACK_MODEL = os.environ.get("ALBATROSS_FALLBACK_MODEL", "gemini-flash-latest")
+# Must be a different model family, not an alias of the primary: the first
+# attempt at this used "gemini-flash-latest", which resolves to the same
+# capacity pool as gemini-3.8-flash and so 503d in lockstep with it.
+FALLBACK_MODEL = os.environ.get("ALBATROSS_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 
 _last_call = 0.0
 _cache_conn: sqlite3.Connection | None = None
@@ -136,10 +139,12 @@ def complete(
     try:
         data = _post(model, body)
     except RuntimeError as e:
-        # A free-tier model can be capacity-unavailable for minutes at a time.
-        # Falling back beats failing a whole run; the cache key records which
-        # model actually answered, so results stay attributable.
-        if "503" not in str(e) or model == FALLBACK_MODEL:
+        # Two distinct free-tier failures, same remedy. 503 is transient
+        # capacity; 429 is the daily request quota, which is counted *per
+        # model* - so a model that has run out says nothing about the next
+        # one. Falling back beats failing a whole run, and the cache records
+        # which model actually answered, so results stay attributable.
+        if not any(c in str(e) for c in ("503", "429")) or model == FALLBACK_MODEL:
             raise
         model = FALLBACK_MODEL
         key = hashlib.sha256(

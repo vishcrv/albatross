@@ -152,13 +152,28 @@ def compare(a: dict, b: dict, keys: set[str]) -> dict | None:
     if _inherited(a) or _inherited(b):
         return {"verdict": "INSUFFICIENT_CONTEXT",
                 "reason_code": "INHERITED_QUALIFIER", "diff": {}, **base}
+
+    # Asserting a contradiction means asserting the two facts measure the same
+    # thing. The predicate registry clusters by similarity, and it over-merges
+    # (D25) - "finance income" and "total income" can share a cluster. So a
+    # contradiction requires the documents to have used the *same words*, not
+    # merely similar ones. Every one of the 211 contradictions this produced
+    # before the check came from a merged pair with differing predicate strings.
+    if a["predicate"].strip().lower() != b["predicate"].strip().lower():
+        return {"verdict": "INSUFFICIENT_CONTEXT",
+                "reason_code": "PREDICATE_UNCERTAIN",
+                "diff": {"predicate": (a["predicate"], b["predicate"])}, **base}
+
     return {"verdict": "CONTRADICTION", "reason_code": "SAME_CELL_DISAGREE",
             "diff": {}, **base}
 
 
 def run(conn) -> dict:
     conn.executescript(VERDICT_SCHEMA)
-    conn.execute("DELETE FROM verdicts")
+    # Only clear what this pass owns. Judge verdicts (JUDGE:*) cost API calls
+    # and cover pairs the comparators cannot reach at all; wiping them here
+    # silently deleted them every time reconciliation re-ran.
+    conn.execute("DELETE FROM verdicts WHERE reason_code NOT LIKE 'JUDGE:%'")
 
     facts = _load(conn)
     groups: dict[tuple, list[dict]] = defaultdict(list)
