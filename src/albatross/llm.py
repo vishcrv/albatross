@@ -28,6 +28,7 @@ MAX_ATTEMPTS = 5
 
 EXTRACT_MODEL = os.environ.get("ALBATROSS_EXTRACT_MODEL", "gemini-3.5-flash-lite")
 JUDGE_MODEL = os.environ.get("ALBATROSS_JUDGE_MODEL", "gemini-3.8-flash")
+FALLBACK_MODEL = os.environ.get("ALBATROSS_FALLBACK_MODEL", "gemini-flash-latest")
 
 _last_call = 0.0
 _cache_conn: sqlite3.Connection | None = None
@@ -132,7 +133,24 @@ def complete(
     if hit:
         return hit[0]
 
-    data = _post(model, body)
+    try:
+        data = _post(model, body)
+    except RuntimeError as e:
+        # A free-tier model can be capacity-unavailable for minutes at a time.
+        # Falling back beats failing a whole run; the cache key records which
+        # model actually answered, so results stay attributable.
+        if "503" not in str(e) or model == FALLBACK_MODEL:
+            raise
+        model = FALLBACK_MODEL
+        key = hashlib.sha256(
+            json.dumps([model, body], sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        hit = c.execute(
+            "SELECT response FROM llm_cache WHERE key=?", (key,)
+        ).fetchone()
+        if hit:
+            return hit[0]
+        data = _post(model, body)
     try:
         text = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError) as e:
@@ -145,27 +163,6 @@ def complete(
     )
     c.commit()
     return text
-
-
-def demo():
-    """Self-check: schema enforcement, and that the cache actually returns."""
-    schema = {
-        "type": "object",
-        "properties": {"answer": {"type": "integer"}},
-        "required": ["answer"],
-    }
-    out = complete("What is 6 times 7? Respond as JSON.", schema=schema)
-    assert json.loads(out)["answer"] == 42, out
-
-    t0 = time.monotonic()
-    again = complete("What is 6 times 7? Respond as JSON.", schema=schema)
-    assert again == out
-    assert time.monotonic() - t0 < 1.0, "second call should have hit the cache"
-    print("llm ok:", out.strip())
-
-
-if __name__ == "__main__":
-    demo()
 
 
 EMBED_MODEL = os.environ.get("ALBATROSS_EMBED_MODEL", "gemini-embedding-001")
@@ -191,14 +188,13 @@ def embed_many(
     out: dict[str, list[float]] = {}
 
     c = cache()
-    if True:
-        for chunk in range(0, len(keys), 500):
-            part = keys[chunk:chunk + 500]
-            rows = c.execute(
-                f"SELECT key, vec FROM embed_cache WHERE key IN"
-                f" ({','.join('?' * len(part))})", part
-            ).fetchall()
-            out.update({r[0]: json.loads(r[1]) for r in rows})
+    for chunk in range(0, len(keys), 500):
+        part = keys[chunk:chunk + 500]
+        rows = c.execute(
+            f"SELECT key, vec FROM embed_cache WHERE key IN"
+            f" ({','.join('?' * len(part))})", part
+        ).fetchall()
+        out.update({r[0]: json.loads(r[1]) for r in rows})
 
     todo = [(k, t) for k, t in zip(keys, texts) if k not in out]
     # Deduplicate: identical claim text is common across a corpus.
@@ -242,13 +238,33 @@ def embed_many(
         vecs = [e["values"] for e in data["embeddings"]]
         for (k, _), v in zip(batch, vecs):
             out[k] = v
-        if True:
-            c.executemany(
+        c.executemany(
                 "INSERT OR REPLACE INTO embed_cache (key, model, dims, vec)"
                 " VALUES (?,?,?,?)",
                 [(k, model, EMBED_DIMS, json.dumps(v))
-                 for (k, _), v in zip(batch, vecs)],
-            )
-            c.commit()
+             for (k, _), v in zip(batch, vecs)],
+        )
+        c.commit()
 
     return [out[k] for k in keys]
+
+
+def demo():
+    """Self-check: schema enforcement, and that the cache actually returns."""
+    schema = {
+        "type": "object",
+        "properties": {"answer": {"type": "integer"}},
+        "required": ["answer"],
+    }
+    out = complete("What is 6 times 7? Respond as JSON.", schema=schema)
+    assert json.loads(out)["answer"] == 42, out
+
+    t0 = time.monotonic()
+    again = complete("What is 6 times 7? Respond as JSON.", schema=schema)
+    assert again == out
+    assert time.monotonic() - t0 < 1.0, "second call should have hit the cache"
+    print("llm ok:", out.strip())
+
+
+if __name__ == "__main__":
+    demo()
