@@ -25,6 +25,21 @@ from . import llm
 ENTITY_TAU = 0.82
 PREDICATE_TAU = 0.78
 
+# Words that do not distinguish one named thing from another: honorifics,
+# legal-form suffixes, and connectives. Everything else in a name is treated as
+# identifying.
+NAME_NOISE = {
+    "mr", "mrs", "ms", "miss", "dr", "prof", "shri", "smt", "sri", "m", "s",
+    "limited", "ltd", "private", "pvt", "llp", "inc", "plc", "corp",
+    "the", "of", "and", "a", "an", "for", "from", "to", "in", "at", "by",
+}
+
+
+def content_tokens(name: str) -> frozenset[str]:
+    return frozenset(
+        t for t in re.findall(r"[a-z0-9]+", name.lower()) if t not in NAME_NOISE
+    )
+
 
 def unit_class(unit: str | None) -> str:
     """Coarse dimension of a unit string, from the corpus's own wording.
@@ -50,7 +65,8 @@ def unit_class(unit: str | None) -> str:
 _DIGITS = re.compile(r"\d+")
 
 
-def _may_merge(a_units: set[str], b_units: set[str], a: str, b: str) -> bool:
+def _may_merge(a_units: set[str], b_units: set[str], a: str, b: str,
+               name_guard: bool = False) -> bool:
     """Hard gates applied before similarity is even consulted.
 
     Compared against the cluster's canonical form, never against the union of
@@ -60,6 +76,16 @@ def _may_merge(a_units: set[str], b_units: set[str], a: str, b: str) -> bool:
     # Different numerals mean different things. Embeddings barely encode
     # digits, so "Activity 8" and "Activity 9" are near-identical vectors.
     if set(_DIGITS.findall(a)) != set(_DIGITS.findall(b)):
+        return False
+    # Entities only. Two names differing by a content word are two things:
+    # "General government deficit" vs "Central government deficit",
+    # "Kotak Mahindra Bank" vs "Kotak Mahindra Capital Company",
+    # "Delhivery Limited" vs "Delhivery Limited Board of Directors".
+    # Applying this to predicates would block acceptance case #1, where
+    # "revenue from operations" and "revenue from contracts with customers"
+    # must merge while sharing almost no content tokens (cosine 0.721) - which
+    # is why the guard is scoped to names rather than relations.
+    if name_guard and content_tokens(a) != content_tokens(b):
         return False
     # Only a genuinely absent unit is permissive. "other" is a real class: it
     # is where bare magnitude words land ("crore", "million"), which are used
@@ -137,7 +163,8 @@ def build(conn, kind: str, column: str, tau: float) -> dict[str, str]:
             best = next(
                 (int(i) for i in order
                  if _may_merge(units[form], units[members[int(i)][0]],
-                               form, members[int(i)][0])),
+                               form, members[int(i)][0],
+                               name_guard=(kind == "entity"))),
                 None,
             )
             if best is not None and sims[best] >= tau:

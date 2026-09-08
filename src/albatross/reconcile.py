@@ -53,11 +53,27 @@ def discriminating_keys(facts: list[dict]) -> set[str]:
     exactly what separates two figures that would otherwise conflict.
     """
     values: dict[str, set[str]] = defaultdict(set)
+    carriers: dict[str, int] = defaultdict(int)
     for f in facts:
+        seen = set()
         for q in f["qualifiers"]:
             k = units.normalise_key(q["key"])
             values[k].add(_qual_value(k, q["value"]))
-    return {k for k, vs in values.items() if len(vs) >= 2}
+            seen.add(k)
+        for k in seen:
+            carriers[k] += 1
+
+    # Two ways a key earns its place. It takes different values here - or some
+    # facts state it and others do not, which is just as discriminating and was
+    # the harder case to see: in the IMF's deficit figures only one fact says
+    # "FY2023/24" while its neighbour says "estimated to have fallen to", so
+    # the key has a single value and a value-spread test alone drops it. The
+    # two figures then share a cell and read as a contradiction between
+    # consecutive years.
+    return {
+        k for k in values
+        if len(values[k]) >= 2 or (len(facts) > 1 and carriers[k] < len(facts))
+    }
 
 
 def _qual_value(key: str, raw) -> str:
@@ -124,7 +140,13 @@ def compare(a: dict, b: dict, keys: set[str]) -> dict | None:
     # them states is *missing information* - we cannot tell whether it would
     # have matched.
     conflicting = {k: (sa[k], sb[k]) for k in set(sa) & set(sb) if sa[k] != sb[k]}
-    missing = sorted(set(sa) ^ set(sb))
+    # Measured against what this predicate *needs*, not merely against what the
+    # two facts happen to mention. If `period` discriminates for a predicate and
+    # neither fact states one, the two are not in the same cell - they are both
+    # under-specified, and the symmetric difference of their own keys is empty
+    # so nothing would flag it. That is how two IMF table rows for different
+    # years, each stripped of its year, read as a confident contradiction.
+    missing = sorted(k for k in keys if k not in sa or k not in sb)
 
     if conflicting:
         # Facts differing on several axes at once are not reconciled by any one

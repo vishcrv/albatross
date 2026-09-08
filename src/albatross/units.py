@@ -150,9 +150,25 @@ def normalise_period(text: str) -> str | None:
     # A quarter is not its parent year. Without this, "Q3 FY24" and "FY24"
     # collapse into one cell and a quarterly figure reads as contradicting the
     # annual one.
-    part = re.search(r"\b(q[1-4]|h[12]|[1-9]m)\b", text, re.IGNORECASE)
+    # \b fails again here, for the opposite reason to the SPAN/YEAR case: in
+    # "2025Q2" the Q follows a digit, so there is no boundary before it and the
+    # quarter marker is silently lost. Guard on letters instead.
+    part = re.search(r"(?<![A-Za-z])(q[1-4]|h[12])(?![A-Za-z0-9])", text,
+                     re.IGNORECASE)
     if part:
-        return f"{label}{part.group(1).upper()}"
+        # "Q2 FY25" and "2025Q2" are NOT the same three months. The first is an
+        # Indian fiscal quarter (Jul-Sep 2024), the second a calendar quarter
+        # (Apr-Jun 2025), and collapsing both to "2025Q2" made the Economic
+        # Survey's 1.2% CAD look like it contradicted the IMF's 0.2%. We do not
+        # claim to know either convention's month boundaries - only that a
+        # fiscal label and a calendar label cannot be assumed interchangeable.
+        # No trailing \b after "fy": in "FY24" the Y is followed by a digit,
+        # which is a word character, so \bfy\b matches nothing. Third time this
+        # exact trap has appeared in this file - fiscal-year labels run letters
+        # into digits, and \b is the wrong tool for every one of them.
+        fiscal = "F" if re.search(r"\bfy|financial year|fiscal", text,
+                                  re.IGNORECASE) else "C"
+        return f"{label}{part.group(1).upper()}{fiscal}"
     if re.search(r"\b(nine|six|three)\s+months?\b", text, re.IGNORECASE):
         return f"{label}PARTIAL"
     return label
@@ -199,9 +215,14 @@ def demo():
                         ("2023-24", "2024"), ("FY'23", "2023"),
                         ("year ended March 31, 2024", "2024"),
                         ("March 31, 2023", "2023"), ("FY22", "2022"),
-                        ("Q3 FY24", "2024Q3"), ("Q4 FY2023-24", "2024Q4"),
+                        ("Q3 FY24", "2024Q3F"), ("Q4 FY2023-24", "2024Q4F"),
+                        ("2025Q2", "2025Q2C"), ("FY2024/25", "2025"),
+                        ("Q2 FY25", "2025Q2F"),
                         ("nine months ended December 31, 2021", "2021PARTIAL")]:
         assert normalise_period(label) == want, (label, normalise_period(label))
+
+    # A fiscal quarter label and a calendar one must not collide.
+    assert normalise_period("Q2 FY25") != normalise_period("2025Q2")
 
     for k in ("as of", "as_of", "as_of_date", "As Of"):
         assert normalise_key(k) == "as_of", (k, normalise_key(k))

@@ -7,6 +7,7 @@ inside src/ would be the document-specific rule the brief bans (D10).
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import hashlib
 from pathlib import Path
 
@@ -105,9 +106,31 @@ def main(argv=None):
             "  (SELECT COUNT(*) FROM blocks b WHERE b.doc_id = d.id) nb"
             " FROM documents d ORDER BY d.added_at"
         ).fetchall()
-        conn.close()
         for row in rows:
             print(f"{row['n']:>4} pages  {row['nb']:>6} blocks  {row['title']}")
+
+        # Tables that only exist once the later stages have run. Catch the
+        # missing-table case specifically - a bare `except Exception` here
+        # silently swallowed a use-after-close and printed nothing at all.
+        for label, sql in (
+            ("facts", "SELECT COUNT(*) FROM facts"),
+            ("entities", "SELECT COUNT(*) FROM registry WHERE kind='entity'"),
+            ("predicates", "SELECT COUNT(*) FROM registry WHERE kind='predicate'"),
+        ):
+            try:
+                print(f"{conn.execute(sql).fetchone()[0]:>4} {label}")
+            except sqlite3.OperationalError:
+                pass
+        try:
+            print()
+            for v, n in conn.execute(
+                "SELECT verdict, COUNT(*) FROM verdicts GROUP BY verdict"
+                " ORDER BY 2 DESC"
+            ):
+                print(f"{n:>5}  {v}")
+        except sqlite3.OperationalError:
+            print("(no verdicts yet - run `reconcile`)")
+        conn.close()
 
 
 if __name__ == "__main__":
