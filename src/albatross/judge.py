@@ -148,10 +148,12 @@ def run_and_store(conn, limit: int | None = None) -> dict:
     The rationale is the point: a verdict a reader cannot check is not an
     answer. It is stored verbatim alongside the model that produced it.
     """
-    import uuid
     from . import reconcile
 
     conn.executescript(reconcile.VERDICT_SCHEMA)
+    # Replace this pass's own rows. Ids are stable now, so re-running would
+    # otherwise leave the previous run's verdicts alongside the new ones.
+    conn.execute("DELETE FROM verdicts WHERE reason_code LIKE 'JUDGE:%'")
     out = run(conn, limit=limit)
     rows, counts = [], {}
     for a, b, j in out["results"]:
@@ -161,7 +163,8 @@ def run_and_store(conn, limit: int | None = None) -> dict:
         verdict, reason = mapped
         counts[verdict] = counts.get(verdict, 0) + 1
         rows.append((
-            str(uuid.uuid4()), verdict, reason, a["id"], b["id"],
+            reconcile.verdict_id(a["id"], b["id"], "judge"),
+            verdict, reason, a["id"], b["id"],
             a["entity_id"], a["predicate_id"], "{}", None, None, 1,
             "low" if (a["grounding_issues"] != "[]" or
                       b["grounding_issues"] != "[]") else "high",

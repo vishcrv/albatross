@@ -22,6 +22,19 @@ from . import units
 # rather than evidence that two facts describe different things.
 DISCRIMINATING_SHARE = 0.70
 
+# A verdict's identity is the pair it is about, not when it was computed.
+# Random ids meant every `reconcile` run invalidated every /verdicts/{id} link,
+# which silently broke a recorded demo mid-take.
+VERDICT_NS = uuid.UUID("6f9619ff-8b86-d011-b42d-00c04fc964ff")
+
+
+def verdict_id(fact_a: str, fact_b: str, source: str = "cmp") -> str:
+    """Stable id for a pair. Comparator and judge verdicts about the same pair
+    stay distinct because `source` is part of the name."""
+    lo, hi = sorted((fact_a, fact_b))
+    return str(uuid.uuid5(VERDICT_NS, f"{lo}|{hi}|{source}"))
+
+
 VERDICT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS verdicts (
     id           TEXT PRIMARY KEY,
@@ -217,7 +230,7 @@ def run(conn) -> dict:
                     continue
                 counts[v["verdict"]] += 1
                 rows.append((
-                    str(uuid.uuid4()), v["verdict"], v["reason_code"],
+                    verdict_id(a["id"], b["id"]), v["verdict"], v["reason_code"],
                     a["id"], b["id"], ent, pred, json.dumps(v["diff"]),
                     v["delta"], v["tolerance"], int(v["cross"]),
                     "low" if (a["grounding_issues"] or b["grounding_issues"])

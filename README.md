@@ -155,7 +155,10 @@ erDiagram
 Six tables, no domain vocabulary. `predicate` and every qualifier key are free
 text, so a new kind of fact is new rows rather than a migration. Ingesting three
 macroeconomics documents after three logistics ones grew the registries from 85
-to 185 entities and 216 to 292 predicates with no code change.
+to 190 entities and 216 to 304 predicates with no code change.
+
+Verdict ids are derived from the fact pair rather than generated, so a
+`/verdicts/{id}` link survives re-running the pipeline.
 
 Page content hashes make ingestion incremental. Re-uploading a document adds
 nothing, and an overlapping page range adds only what is new.
@@ -165,7 +168,7 @@ nothing, and an overlapping page range adds only what is new.
 | layer | choice | why |
 |---|---|---|
 | PDF | PyMuPDF | blocks with bounding boxes, which grounding depends on |
-| Storage | SQLite | 1,048 facts. Postgres costs the reader a container before they see anything |
+| Storage | SQLite | 1,092 facts. Postgres costs the reader a container before they see anything |
 | Vectors | 768-dim embeddings as JSON, numpy cosine | brute force over 1k vectors is ~20 ms. An index earns its cost near a million |
 | Extract | `gemini-3.5-flash-lite` | free tier |
 | Judge | `gemini-3.8-flash` | falls back on 429 or 503 |
@@ -181,24 +184,32 @@ POST.
 **1. Corroborated across documents.** `81,415.38` million rupees in the annual
 report against `8,142 Cr` in the earnings deck. Traced in full above.
 
-**2. A likely contradiction.** None exists in either corpus, and that is the
-finding rather than a gap.
+**2. A likely contradiction.** Two, both cross-document, both on the same
+pattern. The 2022 prospectus calls Sandeep Kumar Barasia an **Executive
+Director and Chief Business Officer**. The FY24 annual report calls him a
+**Whole Time Director and Chief Business Officer** as on 31 March 2024. Same
+for Kapil Bharati as Chief Technology Officer.
 
-The logistics documents once produced 211 numeric contradictions. Not one had
-matching predicate wording on both sides, meaning every one came from two
-different metrics the registry had merged. Requiring the documents to use the
-same words turned all 211 into `INSUFFICIENT_CONTEXT`. Three audited filings
-from one company do not contradict each other.
+The system reports these rather than resolving them, which is the right
+behaviour: under the Companies Act a whole-time director is a kind of executive
+director, so this may be a formal re-designation between 2022 and 2024 or it
+may be two documents using different statutory language for one role. Both
+sources and both page crops are attached so a reader can decide.
 
-Three independent institutions were then ingested specifically to find a
-disagreement. Twelve candidates, all explained: five entity over-merges, three
-lost quarter markers, two unstated periods, and the two below.
+Getting to two took work, because the default answer is none. The logistics
+documents once produced 211 numeric contradictions and not one had matching
+predicate wording on both sides, meaning every one came from two different
+metrics the registry had merged. Requiring the documents to use the same words
+turned all 211 into `INSUFFICIENT_CONTEXT`. Three independent institutions were
+then ingested specifically to find a numeric disagreement, and all twelve
+candidates had explanations: five entity over-merges, three lost quarter
+markers, two unstated periods, and the two that became case 3.
+
 `/verdicts?verdict=INSUFFICIENT_CONTEXT` is the rejection ledger, 343
-comparisons declined with the rule that declined each one.
-
-A unit test builds two facts in one cell with identical predicate wording and
-values outside tolerance, and asserts the verdict is `CONTRADICTION`. The
-machinery fires. The corpus has nothing to fire at.
+comparisons declined with the rule that declined each one. A unit test builds
+two facts in one cell with identical predicate wording and values outside
+tolerance and asserts the verdict is `CONTRADICTION`, so the machinery is
+pinned independently of whether the corpus happens to contain one.
 
 **3. Explained by context.** The Economic Survey reports the current account
 deficit at 1.2% of GDP in **Q2 FY25**. The IMF reports 0.2% in **2025Q2**. Two
